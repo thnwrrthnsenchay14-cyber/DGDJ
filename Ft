@@ -1,0 +1,88 @@
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
+
+local screenGui = script.Parent
+local mainFrame = screenGui:WaitForChild("MainFrame")
+local searchBox = mainFrame:WaitForChild("SearchBox")
+local itemList = mainFrame:WaitForChild("ItemList")
+local lockButton = mainFrame:WaitForChild("LockOnButton")
+
+local isLockOnActive = false
+local currentTarget = nil
+local MAX_LOCK_DISTANCE = 60
+
+---------------------------------------------------------
+-- 1. ระบบ Search (ระบบค้นหาข้อมูลในเมนู)
+---------------------------------------------------------
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local searchText = string.lower(searchBox.Text)
+	
+	-- วนลูปตรวจรายการไอเทม/เป้าหมายใน ScrollingFrame
+	for _, item in pairs(itemList:GetChildren()) do
+		if item:IsA("GuiObject") then
+			local itemName = string.lower(item.Name)
+			-- ถ้าชื่อตรงกับคำค้นหา ให้แสดงผล ถ้าไม่ตรงให้ซ่อน
+			if string.find(itemName, searchText) then
+				item.Visible = true
+			else
+				item.Visible = false
+			end
+		end
+	end
+end)
+
+---------------------------------------------------------
+-- 2. ระบบ Lock-On เป้าหมายศัตรู (ใช้สำหรับระบบเกม)
+---------------------------------------------------------
+local function getClosestEnemy()
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
+	
+	local closestPart = nil
+	local shortestDistance = MAX_LOCK_DISTANCE
+	
+	for _, obj in pairs(Workspace:GetChildren()) do
+		if obj:IsA("Model") and obj ~= character and obj:FindFirstChild("Humanoid") and obj.Humanoid.Health > 0 then
+			local head = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart")
+			if head then
+				local distance = (character.HumanoidRootPart.Position - head.Position).Magnitude
+				if distance < shortestDistance then
+					shortestDistance = distance
+					closestPart = head
+				end
+			end
+		end
+	end
+	return closestPart
+end
+
+-- ปุ่มเปิด/ปิด การล็อกเป้าใน UI
+lockButton.MouseButton1Click:Connect(function()
+	isLockOnActive = not isLockOnActive
+	if isLockOnActive then
+		currentTarget = getClosestEnemy()
+		lockButton.Text = "Lock-On: ON"
+		if not currentTarget then
+			isLockOnActive = false
+			lockButton.Text = "Lock-On: OFF (No Target)"
+		end
+	else
+		currentTarget = nil
+		lockButton.Text = "Lock-On: OFF"
+	end
+end)
+
+-- อัปเดตมุมกล้องล็อกเป้าทุกเฟรม
+RunService.RenderStepped:Connect(function()
+	if isLockOnActive and currentTarget and currentTarget.Parent and currentTarget.Parent:FindFirstChild("Humanoid") and currentTarget.Parent.Humanoid.Health > 0 then
+		camera.CFrame = CFrame.new(camera.CFrame.Position, currentTarget.Position)
+	else
+		isLockOnActive = false
+		currentTarget = nil
+	end
+end)
